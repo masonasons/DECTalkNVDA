@@ -11,7 +11,7 @@ import struct
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 spec = importlib.util.spec_from_file_location(
     "_sonic_fallback",
-    os.path.join(_ROOT, "addon", "synthDrivers", "dectalk", "_sonic_fallback.py"),
+    os.path.join(_ROOT, "addon", "synthDrivers", "dectalknew", "_sonic_fallback.py"),
 )
 sf = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sf)

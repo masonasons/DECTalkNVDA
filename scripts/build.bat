@@ -4,7 +4,7 @@ rem
 rem Uses the upstream VS2022 projects: builds "DECtalk API" (DECtalk.dll) and
 rem "Internal Dictionary Compiler" (whose post-build step compiles
 rem dtalk_us.dic) for x64 and x86, then copies the artifacts into
-rem addon\synthDrivers\dectalk\.
+rem addon\synthDrivers\dectalknew\.
 rem
 rem   scripts\build.bat           - build both architectures
 rem   scripts\build.bat x64       - build only x64
@@ -13,7 +13,7 @@ setlocal enabledelayedexpansion
 set ROOT=%~dp0..
 set SRC=%ROOT%\upstream\src
 set CONFIG=Release - ENGLISH_US
-set DEST=%ROOT%\addon\synthDrivers\dectalk
+set DEST=%ROOT%\addon\synthDrivers\dectalknew
 
 if not exist "%SRC%\DECtalk.sln" (
     echo Engine sources not found. Run scripts\bootstrap.bat first.
@@ -57,7 +57,7 @@ for %%p in (%PLATFORMS%) do (
     rem The dictionary format is architecture-independent; either build's copy works.
     copy /y "%SRC%\dapi\build\dic\%%p\%CONFIG%\dtalk_us.dic" "%DEST%\dtalk_us.dic" >nul
     if errorlevel 1 exit /b 1
-    echo   dtalk_us.dic -^> synthDrivers\dectalk\
+    echo   dtalk_us.dic -^> synthDrivers\dectalknew\
 
     rem Bundled Sonic time-stretcher (Apache-2.0; rate boost on NVDA versions
     rem without a built-in sonic.dll). vcvarsall arch: x64 or x64_x86.
