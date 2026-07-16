@@ -1,0 +1,28 @@
+; Exports for the bundled sonic.dll (built from third_party/sonic, Apache-2.0).
+; Same surface NVDA's own sonic.dll exposes, so either DLL works identically.
+LIBRARY sonic
+EXPORTS
+    sonicCreateStream
+    sonicDestroyStream
+    sonicWriteFloatToStream
+    sonicWriteShortToStream
+    sonicWriteUnsignedCharToStream
+    sonicReadFloatFromStream
+    sonicReadShortFromStream
+    sonicReadUnsignedCharFromStream
+    sonicFlushStream
+    sonicSamplesAvailable
+    sonicGetSpeed
+    sonicSetSpeed
+    sonicGetPitch
+    sonicSetPitch
+    sonicGetRate
+    sonicSetRate
+    sonicGetVolume
+    sonicSetVolume
+    sonicGetQuality
+    sonicSetQuality
+    sonicGetSampleRate
+    sonicSetSampleRate
+    sonicGetNumChannels
+    sonicSetNumChannels

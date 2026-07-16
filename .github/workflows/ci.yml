@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap engine sources
+        shell: cmd
+        run: scripts\bootstrap.bat
+
+      - name: Build DECtalk.dll (x64 + x86) and dictionary
+        shell: cmd
+        run: scripts\build.bat
+
+      - name: Engine smoke tests
+        shell: pwsh
+        run: python tests/test_engine.py
+
+      - name: Bundled Sonic tests
+        shell: pwsh
+        run: python tests/test_sonic.py
+
+      - name: Package add-on
+        shell: pwsh
+        run: python scripts/package.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DECtalk-nvda-addon
+          path: dist/*.nvda-addon
+
+      - name: Release (tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.nvda-addon

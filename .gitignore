@@ -1,0 +1,16 @@
+# Fetched by scripts/bootstrap.bat, never committed:
+# proprietary DECtalk engine sources + the (Apache-2.0) Sonic sources.
+/upstream/
+/third_party/
+
+# Build outputs
+/build/
+/dist/
+*.nvda-addon
+
+# Built artifacts inside the add-on tree (produced by scripts/build.bat)
+/addon/synthDrivers/dectalk/lib/
+/addon/synthDrivers/dectalk/*.dic
+
+__pycache__/
+*.pyc
