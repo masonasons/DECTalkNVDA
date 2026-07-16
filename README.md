@@ -84,6 +84,22 @@ Voice parameter changes apply from the next utterance. Index marks
 (`[:index mark N]`) are wired into NVDA's cursor tracking, so say-all and
 "speak to cursor" behave like any first-class synthesizer.
 
+## Custom voices & .dtv files
+
+**NVDA menu → Tools → DECtalk Voice Manager** turns parameter tweaking into
+shareable voices:
+
+- **Save current voice as new** snapshots the full parameter set you're
+  hearing right now (base voice + all 28 `[:dv]` values, including slider
+  tweaks) under a name of your choosing. The built-in voices are never
+  modified; your new voice appears alongside them in NVDA's voice list and
+  can be tuned further with the same sliders.
+- **Export** writes a voice to a **`.dtv` file**; **Import** loads one
+  somebody else exported. `.dtv` is JSON —
+  `{"format": "dectalk-voice", "version": 1, "name": ..., "base": ...,
+  "params": {"ap": ..., ...}}` — so anything else that speaks DECtalk can
+  adopt it.
+
 ## Notes & limits
 
 - **License:** the upstream engine (`upstream/LICENCE`) is **proprietary

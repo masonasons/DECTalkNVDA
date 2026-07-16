@@ -48,14 +48,11 @@ except ImportError:
 	except Exception:
 		_sonic = None
 
-from . import _dectalk, _params, _text
+from . import _dectalk, _params, _text, _voicestore
 
-_CONF_SECTION = "dectalk"
-config.conf.spec[_CONF_SECTION] = {
-	# JSON: {"<voiceId>": {"<dvCode>": value, ...}, ...} — only values that
-	# differ from the voice's built-in defaults are stored ("auto" otherwise).
-	"voiceParams": "string(default='{}')",
-}
+# The custom section spec ("voiceParams" slider overrides + "customVoices")
+# is registered by _voicestore on import.
+_CONF_SECTION = _voicestore.CONF_SECTION
 
 
 def _clamp(value, lo, hi):
@@ -65,6 +62,16 @@ def _clamp(value, lo, hi):
 class SynthDriver(BaseSynthDriver):
 	name = "dectalk"
 	description = "DECtalk"
+
+	@classmethod
+	def getId(cls):
+		# Store settings under a key of our own instead of cls.name (the
+		# default): several older third-party DECtalk drivers also called
+		# themselves "dectalk", and their stale [speech][dectalk] config
+		# sections — which survive add-on uninstalls — would otherwise be
+		# loaded into this driver (e.g. an old spf of 0 rendering speech
+		# unintelligible, as reported by early users).
+		return "dectalknew"
 
 	supportedSettings = (
 		BaseSynthDriver.VoiceSetting(),
@@ -104,6 +111,8 @@ class SynthDriver(BaseSynthDriver):
 			minVal=_params.COMMA_PAUSE_RANGE[0], maxVal=_params.COMMA_PAUSE_RANGE[1],
 		),
 		BooleanDriverSetting(
+			# NVDA does not split mixed-case words itself (verified by the
+			# user) — this port of the Android app's preprocessing stays.
 			"splitMultiCase", "Split mixed-case words (DECTalk -> DEC Talk)",
 			defaultVal=True,
 		),
@@ -323,7 +332,7 @@ class SynthDriver(BaseSynthDriver):
 	def _commandPrefix(self, rateMul=1.0, pitchMul=1.0, volumeMul=1.0):
 		"""The inline command prefix applying every current setting, mirroring
 		DECtalkSettings.commandPrefix in the Android app."""
-		letter = _params.VOICES[self._voice][0]
+		letter = _params.VOICES[self._voiceBase()][0]
 		sb = [
 			"[:n%s]" % letter,
 			# Character mode is engine state that outlives an utterance;
@@ -334,16 +343,24 @@ class SynthDriver(BaseSynthDriver):
 			"[:spf %d]" % self._spf,
 			"[:pp %d :cp %d]" % (self._sentencePause, self._commaPause),
 		]
-		# Emit only parameters that differ from the voice's built-ins, in
-		# catalog order — plus ap/pr whenever the NVDA pitch/inflection
-		# sliders are off-center.
-		defaults = _params.VOICE_DEFAULTS[self._voice]
+		# For the nine built-ins, emit only parameters that differ from the
+		# voice's own table (in catalog order). A custom voice is fully
+		# defined by its parameters, so emit all of them — the [:nX] base
+		# only gives the engine its starting point. ap/pr are added whenever
+		# the NVDA pitch/inflection sliders are off-center.
 		params = self._currentParams()
-		dv = OrderedDict(
-			(code, params[code])
-			for code, _label, _cat in _params.VOICE_PARAMS
-			if params[code] != defaults[code]
-		)
+		if self._customVoice():
+			dv = OrderedDict(
+				(code, params[code]) for code, _label, _cat in _params.VOICE_PARAMS
+			)
+			defaults = params
+		else:
+			defaults = _params.VOICE_DEFAULTS[self._voiceBase()]
+			dv = OrderedDict(
+				(code, params[code])
+				for code, _label, _cat in _params.VOICE_PARAMS
+				if params[code] != defaults[code]
+			)
 		ap = self._effectiveAp(pitchMul)
 		if ap != defaults["ap"]:
 			dv["ap"] = ap
@@ -476,18 +493,49 @@ class SynthDriver(BaseSynthDriver):
 	# -- voices & settings ---------------------------------------------------
 
 	def _getAvailableVoices(self):
-		return OrderedDict(
+		voices = OrderedDict(
 			(vid, VoiceInfo(vid, displayName, "en"))
 			for vid, (_letter, displayName) in _params.VOICES.items()
 		)
+		for name in sorted(_voicestore.load()):
+			vid = _voicestore.CUSTOM_PREFIX + name
+			voices[vid] = VoiceInfo(vid, name, "en")
+		return voices
 
 	def _get_voice(self):
 		return self._voice
 
 	def _set_voice(self, value):
-		if value not in _params.VOICES:
+		if value not in _params.VOICES and self._customVoice(value) is None:
 			value = "paul"
 		self._voice = value
+
+	def _customVoice(self, voiceId=None):
+		"""The stored record for a custom voice id, or None."""
+		voiceId = self._voice if voiceId is None else voiceId
+		if not voiceId.startswith(_voicestore.CUSTOM_PREFIX):
+			return None
+		return _voicestore.load().get(voiceId[len(_voicestore.CUSTOM_PREFIX):])
+
+	def _voiceBase(self):
+		"""The built-in voice id the engine starts from ([:nX])."""
+		custom = self._customVoice()
+		return custom["base"] if custom else (
+			self._voice if self._voice in _params.VOICES else "paul"
+		)
+
+	def _voiceDefaults(self):
+		"""The current voice's own definition: built-in table for the nine
+		stock voices, the stored parameter set for a custom voice."""
+		custom = self._customVoice()
+		if custom:
+			return custom["params"]
+		return _params.VOICE_DEFAULTS[self._voiceBase()]
+
+	def snapshotVoice(self):
+		"""(base voice id, effective [:dv] params) — what the user currently
+		hears; used by the voice manager to save a new custom voice."""
+		return self._voiceBase(), self._currentParams()
 
 	def _get_rate(self):
 		return self._ratePct
@@ -531,7 +579,9 @@ class SynthDriver(BaseSynthDriver):
 		return self._spf
 
 	def _set_spf(self, value):
-		self._spf = _clamp(value, *_params.SPF_RANGE)
+		# Floor at the slider minimum even for values arriving from config:
+		# near-0 SPF collapses speech to a blip with no spoken way back.
+		self._spf = _clamp(value, 10, _params.SPF_RANGE[1])
 
 	def _get_sentencePause(self):
 		return self._sentencePause
@@ -570,6 +620,7 @@ class SynthDriver(BaseSynthDriver):
 				}
 				for voice, params in data.items()
 				if voice in _params.VOICES
+				or voice.startswith(_voicestore.CUSTOM_PREFIX)
 			}
 		except Exception:
 			log.exception("DECtalk: could not parse saved voice parameters")
@@ -581,8 +632,8 @@ class SynthDriver(BaseSynthDriver):
 		)
 
 	def _currentParams(self):
-		"""The current voice's effective [:dv] values (built-ins + overrides)."""
-		merged = dict(_params.VOICE_DEFAULTS[self._voice])
+		"""The current voice's effective [:dv] values (definition + overrides)."""
+		merged = dict(self._voiceDefaults())
 		merged.update(self._voiceParams.get(self._voice, {}))
 		return merged
 
@@ -592,7 +643,7 @@ class SynthDriver(BaseSynthDriver):
 	def _setDvParam(self, code, value):
 		value = _clamp(int(value), *_params.VOICE_LIMITS[code])
 		overrides = self._voiceParams.setdefault(self._voice, {})
-		if value == _params.VOICE_DEFAULTS[self._voice][code]:
+		if value == self._voiceDefaults()[code]:
 			overrides.pop(code, None)  # back to "auto"
 		else:
 			overrides[code] = value

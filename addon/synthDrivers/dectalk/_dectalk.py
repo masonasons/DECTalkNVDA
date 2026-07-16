@@ -19,6 +19,7 @@ from ctypes import POINTER, Structure, byref, c_char_p, c_int, c_long, c_short, 
 DWORD = c_ulong
 LPSTR = c_char_p
 
+TTS_NORMAL = 0
 TTS_FORCE = 1
 WAVE_MAPPER = 0xFFFFFFFF
 DO_NOT_USE_AUDIO_DEVICE = 0x80000000
@@ -260,7 +261,10 @@ class Engine:
 				with self._stop_lock:
 					self._speaking = True
 				try:
-					lib.TextToSpeechSpeak(self._handle, text, TTS_FORCE)
+					# TTS_NORMAL, not TTS_FORCE: FORCE hard-terminates the
+					# clause, giving unpunctuated fragments sentence-final
+					# prosody. The Sync() below flushes pending speech anyway.
+					lib.TextToSpeechSpeak(self._handle, text, TTS_NORMAL)
 					lib.TextToSpeechSync(self._handle)
 				finally:
 					with self._stop_lock:
