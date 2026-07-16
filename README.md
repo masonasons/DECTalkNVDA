@@ -73,12 +73,10 @@ all in NVDA's Speech settings panel:
   default — `[:np]`, `[:rate 300]`, phonemic `[hxae<300,10>piy]` singing, and
   everything else works in any spoken text; turn it off to speak brackets
   literally, e.g. when reading code).
-- **Per-voice `[:dv]` parameters** (28, each of the nine voices customizable
-  independently): pitch, pitch range, assertiveness, head size, smoothness,
-  richness, breathiness, formants, source gains, and more. Values start at
-  the voice's engine built-in and any you change are stored per voice —
-  matching the mobile apps' "auto unless overridden" behavior. Slider ranges
-  are the engine's own reported limits.
+- **Per-voice `[:dv]` parameters** (28: pitch, pitch range, assertiveness,
+  head size, smoothness, richness, breathiness, formants, source gains, and
+  more) are not synth sliders — you design them into named **custom voices**
+  in the Voice Manager (below), then pick the voice from the Voice list.
 
 Voice parameter changes apply from the next utterance. Index marks
 (`[:index mark N]`) are wired into NVDA's cursor tracking, so say-all and
@@ -86,19 +84,24 @@ Voice parameter changes apply from the next utterance. Index marks
 
 ## Custom voices & .dtv files
 
-**NVDA menu → Tools → DECtalk Voice Manager** turns parameter tweaking into
-shareable voices:
+**NVDA menu → Tools → DECtalk Voice Manager** is where you design voices:
 
-- **Save current voice as new** snapshots the full parameter set you're
-  hearing right now (base voice + all 28 `[:dv]` values, including slider
-  tweaks) under a name of your choosing. The built-in voices are never
-  modified; your new voice appears alongside them in NVDA's voice list and
-  can be tuned further with the same sliders.
-- **Export** writes a voice to a **`.dtv` file**; **Import** loads one
-  somebody else exported. `.dtv` is JSON —
+- **New** (or **Edit**) opens a voice editor: a name, a **base voice** (one of
+  the nine built-ins to start from), and a **spin box for every one of the 28
+  `[:dv]` parameters**, each showing the engine's real value with the engine's
+  real min/max. A **Test** button (**Alt+T**) speaks a sample in the values you
+  currently have entered, so you can dial a voice in by ear before saving.
+- Saving adds the voice to NVDA's **Voice list** next to the built-ins (and
+  switches to it). The built-in voices are never modified.
+- **Export** writes a voice to a **`.dtv` file**; **Import** loads one somebody
+  else exported. `.dtv` is JSON —
   `{"format": "dectalk-voice", "version": 1, "name": ..., "base": ...,
   "params": {"ap": ..., ...}}` — so anything else that speaks DECtalk can
   adopt it.
+
+Rate, pitch, inflection, volume, and the global **SPF / sentence pause / comma
+pause** live in NVDA's Speech settings and apply on top of whatever voice is
+selected.
 
 ## Notes & limits
 

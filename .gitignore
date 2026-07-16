@@ -9,8 +9,8 @@
 *.nvda-addon
 
 # Built artifacts inside the add-on tree (produced by scripts/build.bat)
-/addon/synthDrivers/dectalk/lib/
-/addon/synthDrivers/dectalk/*.dic
+/addon/synthDrivers/dectalknew/lib/
+/addon/synthDrivers/dectalknew/*.dic
 
 __pycache__/
 *.pyc

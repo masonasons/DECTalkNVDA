@@ -50,9 +50,7 @@ except ImportError:
 
 from . import _dectalk, _params, _text, _voicestore
 
-# The custom section spec ("voiceParams" slider overrides + "customVoices")
-# is registered by _voicestore on import.
-_CONF_SECTION = _voicestore.CONF_SECTION
+# _voicestore registers its config section (custom voices) on import.
 
 
 def _clamp(value, lo, hi):
@@ -60,18 +58,16 @@ def _clamp(value, lo, hi):
 
 
 class SynthDriver(BaseSynthDriver):
-	name = "dectalk"
+	# The module and name are "dectalknew", not "dectalk", on purpose:
+	# SynthDriver.initSettings/loadSettings key the config section off
+	# `name` (not getId), and several older third-party DECtalk drivers also
+	# called themselves "dectalk". Their stale [speech][dectalk] sections
+	# survive add-on uninstalls and would otherwise load into this driver —
+	# e.g. an old spf of 0, rendering speech unintelligible, as reported by
+	# early users. A fresh id sidesteps every such collision. The add-on and
+	# the user-visible name stay "DECtalk" (see `description`).
+	name = "dectalknew"
 	description = "DECtalk"
-
-	@classmethod
-	def getId(cls):
-		# Store settings under a key of our own instead of cls.name (the
-		# default): several older third-party DECtalk drivers also called
-		# themselves "dectalk", and their stale [speech][dectalk] config
-		# sections — which survive add-on uninstalls — would otherwise be
-		# loaded into this driver (e.g. an old spf of 0 rendering speech
-		# unintelligible, as reported by early users).
-		return "dectalknew"
 
 	supportedSettings = (
 		BaseSynthDriver.VoiceSetting(),
@@ -120,16 +116,12 @@ class SynthDriver(BaseSynthDriver):
 			"inlineCommands", "Allow inline DECtalk commands in spoken text",
 			defaultVal=True,
 		),
-	) + tuple(
-		NumericDriverSetting(
-			"dv_" + code, label,
-			defaultVal=_params.VOICE_DEFAULTS["paul"][code],
-			minVal=_params.VOICE_LIMITS[code][0],
-			maxVal=_params.VOICE_LIMITS[code][1],
-			availableInSettingsRing=False,
-		)
-		for code, label, _category in _params.VOICE_PARAMS
 	)
+	# The 28 per-voice [:dv] parameters are NOT synth settings. Voice design
+	# happens in the DECtalk Voice Manager (NVDA menu -> Tools), where each
+	# parameter is a raw-value spin box; the result is saved as a named custom
+	# voice that appears in the Voice list. SPF / sentence pause / comma pause
+	# stay here because they are global (apply to every voice).
 
 	supportedCommands = {
 		IndexCommand,
@@ -174,7 +166,6 @@ class SynthDriver(BaseSynthDriver):
 		self._commaPause = 0
 		self._splitMultiCase = True
 		self._inlineCommands = True
-		self._voiceParams = self._loadVoiceParams()
 
 		self._queue = queue.Queue()
 		self._generation = 0
@@ -315,24 +306,30 @@ class SynthDriver(BaseSynthDriver):
 		return _clamp(int(self._volume * mul), *_params.VOLUME_RANGE)
 
 	def _effectiveAp(self, pitchCommandMul=1.0):
-		"""Average pitch: the voice's (possibly overridden) ap scaled by the
-		NVDA pitch slider (50 = unchanged, exponential 0.5x..2x) and any
-		inline PitchCommand multiplier (capital pitch change etc.)."""
+		"""Average pitch: the voice's ap scaled by the NVDA pitch slider (50 =
+		unchanged, exponential 0.5x..2x) and any inline PitchCommand multiplier."""
 		base = self._currentParams()["ap"]
-		factor = 2.0 ** ((self._pitch - 50) / 50.0) * pitchCommandMul
-		return _clamp(int(round(base * factor)), *_params.VOICE_LIMITS["ap"])
-
-	def _effectivePr(self):
-		"""Pitch range scaled by the NVDA inflection slider (50 = unchanged)."""
-		base = self._currentParams()["pr"]
-		return _clamp(
-			int(round(base * self._inflection / 50.0)), *_params.VOICE_LIMITS["pr"]
-		)
+		return _clamp(int(round(base * self._pitchFactor(pitchCommandMul))),
+					  *_params.VOICE_LIMITS["ap"])
 
 	def _commandPrefix(self, rateMul=1.0, pitchMul=1.0, volumeMul=1.0):
-		"""The inline command prefix applying every current setting, mirroring
-		DECtalkSettings.commandPrefix in the Android app."""
-		letter = _params.VOICES[self._voiceBase()][0]
+		"""Inline command prefix for the current voice and all live settings."""
+		return self._commandPrefixFor(
+			self._voiceBase(), self._currentParams(),
+			isCustom=self._customVoice() is not None,
+			rateMul=rateMul, pitchMul=pitchMul, volumeMul=volumeMul,
+		)
+
+	def _commandPrefixFor(
+		self, base, params, isCustom=True,
+		rateMul=1.0, pitchMul=1.0, volumeMul=1.0,
+	):
+		"""Build the inline prefix for base voice `base` with `[:dv]` `params`.
+
+		Shared by normal speech and by the voice manager's Test button, so a
+		preview sounds exactly like the saved voice will.
+		"""
+		letter = _params.VOICES[base][0]
 		sb = [
 			"[:n%s]" % letter,
 			# Character mode is engine state that outlives an utterance;
@@ -343,37 +340,54 @@ class SynthDriver(BaseSynthDriver):
 			"[:spf %d]" % self._spf,
 			"[:pp %d :cp %d]" % (self._sentencePause, self._commaPause),
 		]
-		# For the nine built-ins, emit only parameters that differ from the
-		# voice's own table (in catalog order). A custom voice is fully
-		# defined by its parameters, so emit all of them — the [:nX] base
-		# only gives the engine its starting point. ap/pr are added whenever
+		# A custom voice is fully defined by its parameters, so emit all of
+		# them — [:nX] only gives the engine its starting point. For a built-in,
+		# emit only what differs from its own table. ap/pr are added whenever
 		# the NVDA pitch/inflection sliders are off-center.
-		params = self._currentParams()
-		if self._customVoice():
+		if isCustom:
 			dv = OrderedDict(
 				(code, params[code]) for code, _label, _cat in _params.VOICE_PARAMS
 			)
 			defaults = params
 		else:
-			defaults = _params.VOICE_DEFAULTS[self._voiceBase()]
+			defaults = _params.VOICE_DEFAULTS[base]
 			dv = OrderedDict(
 				(code, params[code])
 				for code, _label, _cat in _params.VOICE_PARAMS
 				if params[code] != defaults[code]
 			)
-		ap = self._effectiveAp(pitchMul)
-		if ap != defaults["ap"]:
+		ap = _clamp(int(round(params["ap"] * self._pitchFactor(pitchMul))),
+					*_params.VOICE_LIMITS["ap"])
+		if ap != defaults["ap"] or "ap" in dv:
 			dv["ap"] = ap
-		elif "ap" in dv:
-			dv["ap"] = ap
-		pr = self._effectivePr()
-		if pr != defaults["pr"]:
-			dv["pr"] = pr
-		elif "pr" in dv:
+		pr = _clamp(int(round(params["pr"] * self._inflection / 50.0)),
+					*_params.VOICE_LIMITS["pr"])
+		if pr != defaults["pr"] or "pr" in dv:
 			dv["pr"] = pr
 		if dv:
 			sb.append("[:dv %s]" % " ".join("%s %d" % kv for kv in dv.items()))
 		return "".join(sb)
+
+	def _pitchFactor(self, pitchCommandMul=1.0):
+		return 2.0 ** ((self._pitch - 50) / 50.0) * pitchCommandMul
+
+	def previewVoice(self, base, params, text=None):
+		"""Speak a sample in voice (base, params) — used by the Test button.
+
+		Bypasses the current voice so the manager hears exactly the edited
+		parameters, at the current rate/volume/pitch/global settings.
+		"""
+		if base not in _params.VOICES:
+			base = "paul"
+		clean = {
+			code: _clamp(int(params.get(code, _params.VOICE_DEFAULTS[base][code])),
+						 *_params.VOICE_LIMITS[code])
+			for code in _params.VOICE_LIMITS
+		}
+		sample = text or "DECtalk voice preview. The quick brown fox jumps over the lazy dog."
+		prefix = self._commandPrefixFor(base, clean, isCustom=True)
+		self.cancel()
+		self._queue.put((self._generation, [("text", prefix + _text.engine_ascii(sample))]))
 
 	# -- worker thread -------------------------------------------------------
 
@@ -502,6 +516,18 @@ class SynthDriver(BaseSynthDriver):
 			voices[vid] = VoiceInfo(vid, name, "en")
 		return voices
 
+	def _get_availableVoices(self):
+		# Override the base getter, which caches into self._availableVoices at
+		# synth load: custom voices are created at runtime, so the list must be
+		# rebuilt on every query or newly-saved voices never appear.
+		return self._getAvailableVoices()
+
+	def refreshVoices(self):
+		"""Drop any cached voice list (belt-and-braces for older NVDA that
+		still caches). Called by the voice manager after a change."""
+		if hasattr(self, "_availableVoices"):
+			del self._availableVoices
+
 	def _get_voice(self):
 		return self._voice
 
@@ -531,11 +557,6 @@ class SynthDriver(BaseSynthDriver):
 		if custom:
 			return custom["params"]
 		return _params.VOICE_DEFAULTS[self._voiceBase()]
-
-	def snapshotVoice(self):
-		"""(base voice id, effective [:dv] params) — what the user currently
-		hears; used by the voice manager to save a new custom voice."""
-		return self._voiceBase(), self._currentParams()
 
 	def _get_rate(self):
 		return self._ratePct
@@ -607,55 +628,9 @@ class SynthDriver(BaseSynthDriver):
 	def _set_inlineCommands(self, value):
 		self._inlineCommands = bool(value)
 
-	# -- per-voice [:dv] parameters -------------------------------------------
-
-	def _loadVoiceParams(self):
-		try:
-			data = json.loads(config.conf[_CONF_SECTION]["voiceParams"])
-			return {
-				voice: {
-					code: int(val)
-					for code, val in params.items()
-					if code in _params.VOICE_LIMITS
-				}
-				for voice, params in data.items()
-				if voice in _params.VOICES
-				or voice.startswith(_voicestore.CUSTOM_PREFIX)
-			}
-		except Exception:
-			log.exception("DECtalk: could not parse saved voice parameters")
-			return {}
-
-	def _saveVoiceParams(self):
-		config.conf[_CONF_SECTION]["voiceParams"] = json.dumps(
-			{v: p for v, p in self._voiceParams.items() if p}
-		)
+	# -- current voice's [:dv] parameters -------------------------------------
 
 	def _currentParams(self):
-		"""The current voice's effective [:dv] values (definition + overrides)."""
-		merged = dict(self._voiceDefaults())
-		merged.update(self._voiceParams.get(self._voice, {}))
-		return merged
-
-	def _getDvParam(self, code):
-		return self._currentParams()[code]
-
-	def _setDvParam(self, code, value):
-		value = _clamp(int(value), *_params.VOICE_LIMITS[code])
-		overrides = self._voiceParams.setdefault(self._voice, {})
-		if value == self._voiceDefaults()[code]:
-			overrides.pop(code, None)  # back to "auto"
-		else:
-			overrides[code] = value
-		self._saveVoiceParams()
-
-	# Generate _get_dv_xx/_set_dv_xx accessors for every [:dv] parameter.
-	# These must be created in the class body: AutoPropertyObject's metaclass
-	# turns _get_*/_set_* into properties at class creation time only.
-	_ns = locals()
-	for _code, _label, _cat in _params.VOICE_PARAMS:
-		_ns["_get_dv_" + _code] = (lambda code: lambda self: self._getDvParam(code))(_code)
-		_ns["_set_dv_" + _code] = (
-			lambda code: lambda self, value: self._setDvParam(code, value)
-		)(_code)
-	del _ns, _code, _label, _cat
+		"""The active voice's full [:dv] value set: a built-in's own table, or
+		a custom voice's stored parameters."""
+		return dict(self._voiceDefaults())

@@ -12,7 +12,7 @@ import time
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _spec = importlib.util.spec_from_file_location(
-    "_dectalk", os.path.join(_ROOT, "addon", "synthDrivers", "dectalk", "_dectalk.py")
+    "_dectalk", os.path.join(_ROOT, "addon", "synthDrivers", "dectalknew", "_dectalk.py")
 )
 dt = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(dt)

@@ -24,9 +24,9 @@ def main():
     version = cp["addon"]["version"].strip("\"'")
 
     required = [
-        os.path.join(ADDON, "synthDrivers", "dectalk", "lib", "x64", "DECtalk.dll"),
-        os.path.join(ADDON, "synthDrivers", "dectalk", "lib", "x64", "sonic.dll"),
-        os.path.join(ADDON, "synthDrivers", "dectalk", "dtalk_us.dic"),
+        os.path.join(ADDON, "synthDrivers", "dectalknew", "lib", "x64", "DECtalk.dll"),
+        os.path.join(ADDON, "synthDrivers", "dectalknew", "lib", "x64", "sonic.dll"),
+        os.path.join(ADDON, "synthDrivers", "dectalknew", "dtalk_us.dic"),
     ]
     missing = [p for p in required if not os.path.isfile(p)]
     if missing:

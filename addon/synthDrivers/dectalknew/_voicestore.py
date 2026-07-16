@@ -19,12 +19,12 @@ import config
 
 from . import _params
 
-CONF_SECTION = "dectalk"
+# Top-level config section for custom voices. "dectalknew" (not "dectalk")
+# for the same collision-avoidance reason the synth uses that id — see
+# SynthDriver in __init__.py.
+CONF_SECTION = "dectalknew"
 config.conf.spec[CONF_SECTION] = {
-	# {"<voiceId>": {"<dvCode>": value, ...}} — per-voice slider overrides;
-	# only values differing from the voice's own definition are stored.
-	"voiceParams": "string(default='{}')",
-	# {"<name>": {"base": "<builtin id>", "params": {<all dv codes>}}}
+	# {"<name>": {"base": "<builtin id>", "params": {<all 28 dv codes>}}}
 	"customVoices": "string(default='{}')",
 }
 
