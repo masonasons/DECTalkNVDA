@@ -403,6 +403,18 @@ class SynthDriver(BaseSynthDriver):
 				self._processUtterance(generation, ops)
 			except Exception:
 				log.exception("DECtalk: error processing utterance")
+			# Report completion only once the pipeline is drained. NVDA queues
+			# several utterances ahead during continuous reading (say all); a
+			# synthDoneSpeaking fired between chunks tells NVDA speech ended and
+			# stalls the read. Idle the player here too (not between chunks) so
+			# audio flows continuously.
+			if generation == self._generation and self._queue.empty():
+				try:
+					self._player.idle()
+				except Exception:
+					log.exception("DECtalk: player idle failed")
+				if generation == self._generation and self._queue.empty():
+					synthDoneSpeaking.notify(synth=self)
 
 	def _processUtterance(self, generation, ops):
 		self._sonicActive = self._sonicBoostActive()
@@ -432,11 +444,9 @@ class SynthDriver(BaseSynthDriver):
 				frames = int(_dectalk.SAMPLE_RATE * payload / 1000.0 / speed)
 				if frames > 0 and generation == self._generation:
 					self._player.feed(b"\x00\x00" * frames)
-		if generation != self._generation:
-			return
-		self._player.idle()
-		if generation == self._generation:
-			synthDoneSpeaking.notify(synth=self)
+		# Player idle + synthDoneSpeaking are handled by _workerLoop once the
+		# whole queue drains, so continuous reading isn't interrupted between
+		# chunks (see the comment there).
 
 	# -- Sonic time-stretch (rate boost) --------------------------------------
 
